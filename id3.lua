@@ -12,7 +12,7 @@ local print = print
 local table = require"table"
 local string = require"string"
 local coroutine = require"coroutine"
-local bit = prequire"bit" or prequire"bit32"
+local bit = prequire"bit" or require"bit32"
 local utf8 = prequire"utf8" or string -- use string.char if no utf8
 
 local char = string.char
@@ -26,7 +26,9 @@ local wrap = coroutine.wrap
 local yield = coroutine.yield
 
 local ipairs = ipairs
-local dprint = print--function() end
+local dprint = dprint or function() end
+local dprintf = dprintf or function() end
+
 
 local tagmap = {
 	TSSE = function(text) return "CreatedBy", text end,
@@ -44,9 +46,14 @@ module"id3"
 
 --[[
 
+\brief read id3 tag
+
 \param fd		an open File object positioned at the start of the file
 \param setpos	if nil/false then the File will be closed; otherwise
-					on exit it will be positioned at the end of the ID3 tag.
+					it will be positioned at the end of the ID3 tag on exit.
+
+\return	table containing id3 info fields
+
 --]]
 
 local function load(fd, setpos)
@@ -61,7 +68,7 @@ local function load(fd, setpos)
 	local s1, s2, s3, s4 = hdr:byte(7, 10)
 	local size = ((s1 * 128 + s2) * 128 + s3) * 128 + s4
 
-	dprint(format("version 2.%d.%d flags 0x%02X size %d", rev1, rev2, flags, size))
+	dprintf("version 2.%d.%d flags 0x%02X size %d", rev1, rev2, flags, size)
 
 	local unsync = band(flags, 0x80) ~= 0
 	local hasexthdr = band(flags, 0x40) ~= 0
@@ -161,7 +168,7 @@ local function load(fd, setpos)
 			text = concat(hex, " ")
 		end	
 		
-		dprint(format("%s: %02X %02X: %s", f.tag, f.flags[1], f.flags[2], text))
+		dprintf("%s: %02X %02X: %s", f.tag, f.flags[1], f.flags[2], text)
 		
 		local fn = tagmap[f.tag]
 		if fn then
@@ -172,28 +179,6 @@ local function load(fd, setpos)
 		end
 	end
 
-	--[[ ex:
-	TSSE: 00 00: LAME 64bits version 3.100 (http://lame.sf.net)
-	TIT2: 00 00: Bad Boyfriend
-	TPE1: 00 00: Garbage
-	TALB: 00 00: Bleed Like Me
-	TRCK: 00 00: 01
-	TCON: 00 00: Other
-	TYER: 00 00: 2005
-	TLEN: 00 00: 227173
-	]]
-	--[[
-		if f.tag == "TSSE" then
-		elseif f.tag == "TIT2" then
-		elseif f.tag == "TPE1" then
-		elseif f.tag == "TALB" then
-		elseif f.tag == "TRCK" then
-		elseif f.tag == "TCON" then
-		elseif f.tag == "TYER" then
-		elseif f.tag == "TLEN" then
-		else
-	]]
-	
 	if setpos then
 		skip(length)
 	else
