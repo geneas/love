@@ -42,6 +42,12 @@ local tagmap = {
 
 module"id3"
 
+--[[
+
+\param fd		an open File object positioned at the start of the file
+\param setpos	if nil/false then the File will be closed; otherwise
+					on exit it will be positioned at the end of the ID3 tag.
+--]]
 
 local function load(fd, setpos)
 	local hdr = fd:read(10)
