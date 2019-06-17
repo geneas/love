@@ -44,6 +44,7 @@ local yield = coroutine.yield
 
 local dprint = dprint or function() end
 local dprintf = dprintf or function() end
+local d2printf = d2printf or function() end
 
 
 local tagmap = {
@@ -169,11 +170,10 @@ local function loadtag(fd, setpos, hdr)
 		end
 	end
 	local function hexdump(t, head)
-		local out = { "0000 "}
+		local out = { "0000 " }
 		local ascii = {}
 		
 		for i, b in ipairs(t) do
-			
 			if i > 1 and i % 16 == 1 then
 				insert(out, ("  %s\n%s%04X "):format(concat(ascii), head, i - 1))
 				ascii = {}
