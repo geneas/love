@@ -42,34 +42,36 @@ local toutf8 = utf8.char or function(...)
 local wrap = coroutine.wrap
 local yield = coroutine.yield
 
-local dprint = dprint or function() end
-local dprintf = dprintf or function() end
-local d2printf = d2printf or function() end
+local debug_enabled = _G.debug_level and _G.debug_level > 0
+
+local dprint = debug_enabled and (dprint or function() end)
+local dprintf = debug_enabled and (dprintf or function() end)
+local d2printf = debug_enabled and (d2printf or function() end)
 
 
 local tagmap = {
 	-- 2.3 tags
-	TSSE = function(text) return "CreatedBy", text end,
-	TIT2 = function(text) return "TrackName", text end,
-	TPE1 = function(text) return "Artist", text end,
-	TALB = function(text) return "Album", text end,
-	TRCK = function(text) return "TrackNumber", tonumber(text:match"0*(.*)") end,
-	TCON = function(text) return "Genre", text end,
-	TYER = function(text) return "Year", tonumber(text) end,
-	TLEN = function(text) return "Length", tonumber(text) / 1000.0 end,
+	TSSE = { "CreatedBy" },
+	TIT2 = { "TrackName" },
+	TPE1 = { "Artist" },
+	TALB = { "Album" },
+	TRCK = { "TrackNumber",	function(t) tonumber(t:match"0*(.*)") end },
+	TCON = { "Genre" },
+	TYER = { "Year",			function(t) return tonumber(t) end },
+	TLEN = { "Length",		function(t) return tonumber(t) / 1000.0 end },
 	
 	-- 2.4 tags
-	TORY = function(text) return "Year", tonumber(text) end,
+	TORY = { "Year",			function(t) return tonumber(t) end },
 	
 	-- 2.2 tags
-	TEN = function(text) return "CreatedBy", text end,
-	TT2 = function(text) return "TrackName", text end,
-	TP1 = function(text) return "Artist", text end,
-	TAL = function(text) return "Album", text end,
-	TRK = function(text) return "TrackNumber", tonumber(text:match"0*(.*)") end,
-	TCO = function(text) return "Genre", text end,
-	TYE = function(text) return "Year", tonumber(text) end,
-	TLE = function(text) return "Length", tonumber(text) / 1000.0 end,
+	TEN = { "CreatedBy" },
+	TT2 = { "TrackName" },
+	TP1 = { "Artist" },
+	TAL = { "Album" },
+	TRK = { "TrackNumber",	function(t) tonumber(t:match"0*(.*)") end },
+	TCO = { "Genre" },
+	TYE = { "Year",			function(t) return tonumber(t) end },
+	TLE = { "Length",			function(t) return tonumber(t) / 1000.0 end },
 	
 }
 
@@ -80,6 +82,27 @@ if _VERSION:match"Lua 5%.[12]" then
 	module "id3"
 end
 
+local function hexdump(t, head)
+	local out = { "0000 " }
+	local ascii = { "  " }
+	
+	for i, b in ipairs(t) do
+		if i > 1 and i % 16 == 1 then
+			insert(out, ("%s\n%s%04X "):format(concat(ascii), head or "", i - 1))
+			ascii = { "  " }
+		elseif i > 1 and i % 8 == 1 then
+			insert(out, " ")
+		end
+		insert(out, (" %02X"):format(b))
+		insert(ascii, b >= 0x20 and b < 0x7F and char(b) or b >= 0xA0 and "?" or ".")
+	end
+	local r = #t % 16
+	if r > 0 then
+		insert(out, (" "):rep((16 - r) * 3 + (r <= 8 and 1 or 0)))
+	end
+	insert(out, concat(ascii))
+	return concat(out)
+end
 
 local function loadtag(fd, setpos, hdr)
 	local rev1, rev2 = hdr:byte(4, 5)
@@ -87,7 +110,7 @@ local function loadtag(fd, setpos, hdr)
 	local s1, s2, s3, s4 = hdr:byte(7, 10)
 	local size = ((s1 * 128 + s2) * 128 + s3) * 128 + s4
 
-	dprintf("version 2.%d.%d flags 0x%02X size %d", rev1, rev2, flags, size)
+	_ = dprintf and dprintf("version 2.%d.%d flags 0x%02X size %d", rev1, rev2, flags, size)
 
 	local unsync = band(flags, 0x80) ~= 0
 	local hasexthdr = rev1 > 2 and band(flags, 0x40) ~= 0
@@ -169,31 +192,10 @@ local function loadtag(fd, setpos, hdr)
 			end
 		end
 	end
-	local function hexdump(t, head)
-		local out = { "0000 " }
-		local ascii = {}
-		
-		for i, b in ipairs(t) do
-			if i > 1 and i % 16 == 1 then
-				insert(out, ("  %s\n%s%04X "):format(concat(ascii), head, i - 1))
-				ascii = {}
-			elseif i > 1 and i % 8 == 1 then
-				insert(out, " ")
-			end
-			insert(out, (" %02X"):format(b))
-			insert(ascii, b >= 0x20 and b < 0x7F and char(b) or ".")
-		end
-		local r = #t % 16
-		if r > 0 then
-			insert(out, (" "):rep((16 - r) * 3 + (r <= 8 and 3 or 2)))
-			insert(out, concat(ascii))
-		end
-		return concat(out)
-	end
 	
 	
 	if rev1 < 4 then	
-		-- 2.2/2.3 use global unsync flag for reading all tag data
+		-- 2.2/2.3 use global unsync flag for reading all tag data; replace getter function
 		get1 = function()
 				if unsync then return readsync()
 				else return reader()
@@ -216,11 +218,11 @@ local function loadtag(fd, setpos, hdr)
 
 	local tab = {}
 	for f in getframe do
-		local tagfn = tagmap[f.tag]
+		local tagfmt = tagmap[f.tag]
 		
-		d2printf("%4s[%02X%02X]: %s", f.tag, f.flags[1] or 0, f.flags[2] or 0, hexdump(f.data, "            "))
+		_ = d2printf and d2printf("%4s[%02X%02X]: %s", f.tag, f.flags[1] or 0, f.flags[2] or 0, hexdump(f.data, "            "))
 		
-		if tagfn then
+		if tagfmt then
 			local text = ""
 
 			if f.data[1] == 0 then			-- ascii (ISO-8859-1) data
@@ -269,11 +271,9 @@ local function loadtag(fd, setpos, hdr)
 				text = concat(hex, " ")
 			end	
 			
-			dprintf("%s: %s", f.tag, text)
+			_ = dprintf and dprintf("%s: %s", f.tag, text)
 		
-			local item, data = tagfn(text)
-					
-			tab[item] = data
+			tab[tagfmt[1]] = tagfmt[2] and tagfmt[2](text) or text:gsub("%z$", "")
 		end
 	end
 
