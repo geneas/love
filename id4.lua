@@ -1,4 +1,14 @@
 --%tabs=3
+--[[--
+
+	MP4 Metadata Decoder for Lua
+	
+	Copyright(c) 2019 Andrew Cannon <ajc@gmx.net>
+	
+	Licensed under the MIT licence.
+	For details see file LICENSE in this directory.
+
+--]]--
 
 local _G = _G
 local pcall = pcall
@@ -18,7 +28,7 @@ local debug_enabled = _G.debug_level and _G.debug_level > 0
 local dprint = debug_enabled and (dprint or function() end)
 local dprintf = debug_enabled and (dprintf or function() end)
 local d2printf = debug_enabled and (d2printf or function() end)
-
+local dump = debug_enabled and (dump or function() end)
 
 local id4 = {}
 if _VERSION:match"Lua 5%.[12]" then
@@ -39,139 +49,51 @@ local function tobinary(data, i, j)
 	return acc
 end
 local genres = {
-	[0x00] = "Undefined",
-
--- MOVIE/DRAMA
-
-	[0x10] = "Movie/Drama",
-	[0x11] = "Detective/Thriller",
-	[0x12] = "Adventure/Western/War",
-	[0x13] = "Science Fiction/Fantasy/Horror",
-	[0x14] = "Comedy",
-	[0x15] = "Soap/Melodrama/Folkloric",
-	[0x16] = "Romance",
-	[0x17] = "Serious/Classical/Religious/Historical Movie/Drama",
-	[0x18] = "Adult Movie/Drama",
-
--- NEWS/CURRENT AFFAIRS
-
-	[0x20] = "News/Current Affairs",
-	[0x21] = "News/Weather Report",
-	[0x22] = "News Magazine",
-	[0x23] = "Documentary",
-	[0x24] = "Discussion/Interview/Debate",
-
--- SHOW
-
-	[0x30] = "Show/Game Show",
-	[0x31] = "Game Show/Quiz/Contest",
-	[0x32] = "Variety Show",
-	[0x33] = "Talk Show",
-
--- SPORTS
-
-	[0x40] = "Sports",
-	[0x41] = "Special Event",
-	[0x42] = "Sport Magazine",
-	[0x43] = "Football",
-	[0x44] = "Tennis/Squash",
-	[0x45] = "Team Sports",
-	[0x46] = "Athletics",
-	[0x47] = "Motor Sport",
-	[0x48] = "Water Sport",
-	[0x49] = "Winter Sports",
-	[0x4A] = "Equestrian",
-	[0x4B] = "Martial Sports",
-
--- CHILDREN/YOUTH
-
-	[0x50] = "Children's/Youth Programmes",
-	[0x51] = "Pre-school Children's Programmes",
-	[0x52] = "Entertainment Programmes for 6 to 14",
-	[0x53] = "Entertainment Programmes for 10 to 16",
-	[0x54] = "Informational/Educational/School Programme",
-	[0x55] = "Cartoons/Puppets",
-
--- MUSIC/BALLET/DANCE
-
-	[0x60] = "Music/Ballet/Dance",
-	[0x61] = "Rock/Pop",
-	[0x62] = "Serious/Classical Music",
-	[0x63] = "Folk/Traditional Music",
-	[0x64] = "Musical/Opera",
-	[0x65] = "Ballet",
-
--- ARTS/CULTURE
-
-	[0x70] = "Arts/Culture",
-	[0x71] = "Performing Arts",
-	[0x72] = "Fine Arts",
-	[0x73] = "Religion",
-	[0x74] = "Popular Culture/Traditional Arts",
-	[0x75] = "Literature",
-	[0x76] = "Film/Cinema",
-	[0x77] = "Experimental Film/Video",
-	[0x78] = "Broadcasting/Press",
-	[0x79] = "New Media",
-	[0x7A] = "Arts/Culture Magazines",
-	[0x7B] = "Fashion",
-
--- SOCIAL/POLITICAL/ECONOMICS
-
-	[0x80] = "Social/Political/Economics",
-	[0x81] = "Magazines/Reports/Documentary",
-	[0x82] = "Economics/Social Advisory",
-	[0x83] = "Remarkable People",
-
--- EDUCATIONAL/SCIENCE
-
-	[0x90] = "Education/Science/Factual",
-	[0x91] = "Nature/Animals/Environment",
-	[0x92] = "Technology/Natural Sciences",
-	[0x93] = "Medicine/Physiology/Psychology",
-	[0x94] = "Foreign Countries/Expeditions",
-	[0x95] = "Social/Spiritual Sciences",
-	[0x96] = "Further Education",
-	[0x97] = "Languages",
-
--- LEISURE/HOBBIES
-
-	[0xA0] = "Leisure/Hobbies",
-	[0xA1] = "Tourism/Travel",
-	[0xA2] = "Handicraft",
-	[0xA3] = "Motoring",
-	[0xA4] = "Fitness &amp; Health",
-	[0xA5] = "Cooking",
-	[0xA6] = "Advertisement/Shopping",
-	[0xA7] = "Gardening",
-
--- SPECIAL
-
-	[0xB0] = "Special Characteristics",
-	[0xB1] = "Original Language",
-	[0xB2] = "Black &amp; White",
-	[0xB3] = "Unpublished",
-	[0xB4] = "Live Broadcast",
-
--- USERDEFINED
-
-	[0xF0] = "Drama",
-	[0xF1] = "Detective/Thriller",
-	[0xF2] = "Adventure/Western/War",
-	[0xF3] = "Science Fiction/Fantasy/Horror",
----- below currently ignored by XBMC see http://trac.xbmc.org/ticket/13627
-	[0xF4] = "Comedy",
-	[0xF5] = "Soap/Melodrama/Folkloric",
-	[0xF6] = "Romance",
-	[0xF7] = "Serious/ClassicalReligion/Historical",
-	[0xF8] = "Adult",
+        "Blues", "Classic Rock", "Country", "Dance",
+        "Disco", "Funk", "Grunge", "Hip-Hop",
+        "Jazz", "Metal", "New Age", "Oldies",
+        "Other", "Pop", "R&B", "Rap",
+        "Reggae", "Rock", "Techno", "Industrial",
+        "Alternative", "Ska", "Death Metal", "Pranks",
+        "Soundtrack", "Euro-Techno", "Ambient", "Trip-Hop",
+        "Vocal", "Jazz+Funk", "Fusion", "Trance",
+        "Classical", "Instrumental", "Acid", "House",
+        "Game", "Sound Clip", "Gospel", "Noise",
+        "Alternative Rock", "Bass", "Soul", "Punk",
+        "Space", "Meditative", "Instrumental Pop", "Instrumental Rock",
+        "Ethnic", "Gothic", "Darkwave", "Techno-Industrial",
+        "Electronic", "Pop-Folk", "Eurodance", "Dream",
+        "Southern Rock", "Comedy", "Cult", "Gangsta",
+        "Top 40", "Christian Rap", "Pop/Funk", "Jungle",
+        "Native US", "Cabaret", "New Wave", "Psychedelic",
+        "Rave", "Showtunes", "Trailer", "Lo-Fi",
+        "Tribal", "Acid Punk", "Acid Jazz", "Polka",
+        "Retro", "Musical", "Rock & Roll", "Hard Rock",
+        "Folk", "Folk-Rock", "National Folk", "Swing",
+        "Fast Fusion", "Bebob", "Latin", "Revival",
+        "Celtic", "Bluegrass", "Avantgarde", "Gothic Rock",
+        "Progressive Rock", "Psychedelic Rock", "Symphonic Rock", "Slow Rock",
+        "Big Band", "Chorus", "Easy Listening", "Acoustic",
+        "Humour", "Speech", "Chanson", "Opera",
+        "Chamber Music", "Sonata", "Symphony", "Booty Bass",
+        "Primus", "Porn Groove", "Satire", "Slow Jam",
+        "Club", "Tango", "Samba", "Folklore",
+        "Ballad", "Power Ballad", "Rhythmic Soul", "Freestyle",
+        "Duet", "Punk Rock", "Drum Solo", "Acapella",
+        "Euro-House", "Dance Hall", "Goa", "Drum & Bass",
+        "Club - House", "Hardcore", "Terror", "Indie",
+        "BritPop", "Negerpunk", "Polsk Punk", "Beat",
+        "Christian Gangsta Rap", "Heavy Metal", "Black Metal", "Crossover",
+        "Contemporary Christian", "Christian Rock", "Merengue", "Salsa",
+        "Thrash Metal", "Anime", "JPop", "Synthpop",
+        "Unknown",
 }	
 local tagmap = {
 	["aART"]		= { "Artist" },	-- "Album Artist"?
 	["\169art"]	= { "Artist" },
 	["\169alb"]	= { "Album" },
 	["\169gen"]	= { "Genre" },
-	gnre			= { "Genre",			function(d) return genres[tobinary(d)] or genres[0] end },
+	gnre			= { "Genre",			function(d) return genres[tobinary(d)] or genres[#genres] end },
 	["\169nam"]	= { "TrackName" },
 	trkn			= { "TrackNumber",	function(d) return d:byte(4) end },
 	["\169day"]	= { "Year",				function(d) return tonumber(d:sub(1, 4)) end },
@@ -387,7 +309,11 @@ local function mp4load(fd, coverart, rewind)
 				proc(h, data)
 			
 				-- test:
-				--h.data = "\n" .. hexdump { data:byte(1, h.tag == "ilst" and 1024 or 64) }
+				if dump then
+					h.data = "\n" .. hexdump { data:byte(1, h.tag == "ilst" and 1024 or 64) }
+					dump(h, "maxlev=1")
+					h.data = nil
+				end
 			else
 				-- skip uninteresting container
 				get(h, h.len, true)

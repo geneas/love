@@ -1,4 +1,14 @@
 --%tabs=3
+--[[--
+
+	ID3 Tag Decoder for Lua
+	
+	Copyright(c) 2019 Andrew Cannon <ajc@gmx.net>
+	
+	Licensed under the MIT licence.
+	For details see file LICENSE in this directory.
+
+--]]--
 
 local function prequire(module)
 	local ok, mod = pcall(require, module)
