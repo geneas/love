@@ -3,11 +3,6 @@
 
 	lua/love2d helper functions for use with Android OS
 	
-	Copyright(c) 2019 Andrew Cannon <ajc@gmx.net>
-	
-	Licensed under the MIT licence.
-	For details see file LICENSE in this directory.
-	
 --]]--
 
 local require = require
@@ -17,6 +12,9 @@ local type = type
 
 local table = require "table"
 local lfs = require "lfs"
+
+-- use terminal if available
+local packageLoaded = package.loaded
 
 local android = {}
 if _VERSION:match"Lua 5%.[12]" then
@@ -30,7 +28,7 @@ local function getSdPaths(locations)
 	--
 	locations = locations or {
 		{ name = "storage", "sdcard0", "extSdCard", "%w%w%w%w%-%w%w%w%w" },
-		{ name = "mnt", "sdcard", "extSdCard", "external_sd",	{ name = "media_rw", "%w%w%w%w%-%w%w%w%w" }},
+		--{ name = "mnt", "sdcard", "extSdCard", "external_sd",	{ name = "media_rw", "%w%w%w%w%-%w%w%w%w" }},
 	}
 	
 	local out = {}
@@ -58,6 +56,12 @@ local function getSdPaths(locations)
 		end
 	end
 	pcall(scandir, locations)
+	
+	if packageLoaded.terminal then
+		pcall(packageLoaded.terminal.print, "Android SD paths:")
+		pcall(packageLoaded.terminal.dump, out)
+	end
+	
 	return out
 end
 

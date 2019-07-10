@@ -309,7 +309,7 @@ end
 
 --]]--------------------------------------------------------------------
 id3.load = function(fd, setpos)
-	local hdr = fd:read(10)
+	local hdr = fd:read(10) or ""
 
 	if not hdr:match"^ID3[%z\1-\254][%z\1-\254].[%z\1-\127][%z\1-\127][%z\1-\127][%z\1-\127]" then
 		return nil, "no id3v2 header found"
