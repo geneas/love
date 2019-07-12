@@ -52,6 +52,8 @@ local errorf = function(...) error(format(...)) end
 local g_lmarg, g_rmarg = 2, 35
 local g_idgap, g_trgap = 2, 2
 local g_maxblocks = 10000
+local g_wordwrap = false
+local g_rotate = true--false
 
 -- screen parameters
 local g_width, g_height
@@ -69,61 +71,91 @@ local g_blockid
 
 -- compute wrapping for one text block
 local function wrap(block)
-	---[[
 	local prevnseg = block.nseg or 1
+	local nseg = 1
 	local text = block.text
 	local tlen = #text
 	local xlen = g_font:getWidth(text)
 	local idlen = g_font:getWidth(tostring(block.id))
 	local linew = max(1, g_width - g_lmarg - idlen - g_idgap - g_trgap - g_rmarg)
-	local pos = 1
-	local function nextline()
-		local crem = tlen - pos + 1				-- characters remaining
-		local clen = ceil(crem * linew / xlen)	-- approx chars per line
-		local over = false
-		local n = utf8.offset(text, 0, pos + max(1, min(clen, crem))) - pos
-		
-		if n == 0 then n = utf8.offset(text, 2, pos) - pos end
-		--assert(n > 0)
-		--local cnt = 0
-		while true do
-			local t = text:sub(pos, pos + n - 1)
-			--local l = g_font:getWidth(t)
-			local ok, l = pcall(g_font.getWidth, g_font, t)
-			if not ok then errorf("pos=%d n=%d t='%s'", pos, n, t) end
-			
-			if l == linew then break			-- exact fit
-			elseif l < linew then				-- too short
-				if over then break end			-- if we have decremented then stop
-				if n == crem then break end	-- if end of string then stop
-				n = utf8.offset(text, 2, pos + n) - pos
-			else
-				local p = utf8.offset(text, 0, pos + n - 1) - pos
-				
-				if p == 0 then break end		-- string too short?
-				n = p
-				over = true
-			end
-			--cnt = cnt + 1
-			--if cnt > 99 then
-			--	errorf("tlen=%d xlen=%d done=%d crem=%d clen=%d n=%d over=%s l=%d linew=%d", tlen, xlen, done, crem, clen, n, tostring(over), l, linew)
-			--end
-		end
-		insert(block.segs, { pos = pos, last = n < crem and pos + n - 1 or nil })
-		pos = pos + n
-		return n < crem
-	end
 	
 	if xlen <= linew then
-		block.nseg = 1
+		block.nseg = nil
 		block.segs = nil
 	else
-		block.segs = {}
-		while nextline() do end
-		block.nseg = #block.segs
+		local segments = {}
+		
+		if g_wordwrap then
+			local _, lines = g_font:getWrap(text, linew)
+			local pos = 1
+			local prev
+			
+			block.segs = {}
+			for i, t in ipairs(lines) do
+				local seg = { pos = pos }
+				
+				insert(segments, seg)
+				if prev then prev.last = pos - 1 end
+				pos = pos + #t
+				prev = seg
+			end
+		else -- character wrap
+			local pos = 1
+			local function nextline()
+				local crem = tlen - pos + 1				-- characters remaining
+				local clen = ceil(crem * linew / xlen)	-- approx chars per line
+				local over = false
+				local n = utf8.offset(text, 0, pos + max(1, min(clen, crem))) - pos
+				
+				if n == 0 then n = utf8.offset(text, 2, pos) - pos end
+				while true do
+					local t = text:sub(pos, pos + n - 1)
+					local l = g_font:getWidth(t)
+					
+					if l == linew then break			-- exact fit
+					elseif l < linew then				-- too short
+						if over then break end			-- if we have decremented then stop
+						if n == crem then break end	-- if end of string then stop
+						n = utf8.offset(text, 2, pos + n) - pos
+					else
+						local p = utf8.offset(text, 0, pos + n - 1) - pos
+						
+						if p == 0 then break end		-- string too short?
+						n = p
+						over = true
+					end
+				end
+				insert(segments, { pos = pos, last = n < crem and pos + n - 1 or nil })
+				pos = pos + n
+				return n < crem
+			end
+			
+			while nextline() do end
+		end
+		nseg = #segments
+		block.nseg = nseg
+		block.segs = segments
 	end
-	g_linecount = g_linecount + block.nseg - prevnseg
-	--]]
+	g_linecount = g_linecount + nseg - prevnseg
+end
+
+
+------------------------
+-- API functions
+----------------
+
+local function lconfig(cfg)
+	local old = {
+		maxblocks = g_maxblocks,
+		wordwrap = g_wordwrap,
+		rotate = g_rotate,
+	}
+	
+	if cfg and cfg.maxblocks ~= nil then g_maxblocks = cfg.maxblocks end
+	if cfg and cfg.wordwrap ~= nil then g_wordwrap = cfg.wordwrap end
+	if cfg and cfg.rotate ~= nil then g_rotate = cfg.rotate end
+	
+	return old
 end
 
 local function lnewline()
@@ -197,7 +229,7 @@ local function lshowinfo()
 	--
 	g_shown = true
 	
-	lprintf("Löve2d terminal version 0.3")
+	lprintf("Löve2d terminal version 0.5")
 	lprintf("---------------------------")
 	lprintf("width %d height %d dpiScale %f", g_width, g_height, g_font:getDPIScale())
 	local function show(name)
@@ -216,11 +248,17 @@ local function lshowinfo()
 end
 
 
+--------------------------
+-- Screen Update
+----------------
+
 -- get current screen parameters
 local function getscreen()
 	local width, height = love.window.getMode()
 	local font = love.graphics.getFont()
 	local dpiScale = font:getDPIScale()
+	
+	if g_rotate then width, height = height, width end
 	
 	return floor(width / dpiScale), floor(height / dpiScale), font
 end
@@ -325,7 +363,7 @@ local function drawscreen(startline, count, drawfunc)
 		
 		while segnum <= nsegs do
 			local seg = segments[segnum]
-			--if not seg then errorf("blknum %d segnum %d nsegs %d count %d", blknum, segnum, nsegs, count) end
+			if not seg then errorf("blknum %d segnum %d nsegs %d count %d", blknum, segnum, nsegs, count) end
 			local line = text:sub(seg.pos, seg.last)
 			
 			drawfunc(line, block.id, segnum == 1)
@@ -348,6 +386,31 @@ local g_px, g_py, g_pdown, g_pvid		-- previous state
 local g_refx, g_refy, g_rstat				-- reference posn
 local g_first = true
 
+local function mousePosition()
+	local x, y = love.mouse.getPosition()
+	
+	if g_rotate then x, y = g_width - y, x end
+	return x, y
+end
+local function drawText(s, x, y)
+	local dir = 0
+	
+	if g_rotate then
+		x, y = y, g_width - x
+		dir = -math.pi / 2
+	end
+	love.graphics.print(s, x, y, dir)
+end
+local function drawRectangle(mode, x, y, w, h)
+	if g_rotate then
+		x, y = y, g_width - x - w
+		w, h = h, w
+	end
+	love.graphics.rectangle(mode, x, y, w, h)
+end
+
+
+
 local function ldraw( )
 	--love.graphics.print("start here: ", x, y)
 	--y = y + 20
@@ -358,7 +421,7 @@ local function ldraw( )
 	
 	-- mouse handling
 	local mactive = true
-	local mx, my = love.mouse.getPosition()
+	local mx, my = mousePosition()
 	local mdown = love.mouse.isDown(1)
 	if not g_pactive then
 		g_px, g_py, g_pdown = mx, my, mdown
@@ -392,10 +455,10 @@ local function ldraw( )
 		
 		if first then
 			love.graphics.setColor(1, 0, 0)
-			love.graphics.print(idstr, x, y)
+			drawText(idstr, x, y)
 		end
 		love.graphics.setColor(0, 0, 0)
-		love.graphics.print(text, x + idlen + g_idgap, y)
+		drawText(text, x + idlen + g_idgap, y)
 		
 		y = y + g_lineHeight
 	end
@@ -427,15 +490,15 @@ local function ldraw( )
 		
 		-- draw button
 		love.graphics.setColor(unpack(b.colour))
-		love.graphics.rectangle("fill", b.x, b.y, b.w, b.h)
+		drawRectangle("fill", b.x, b.y, b.w, b.h)
 				
 	end
 	
 	
 	love.graphics.setColor(0.7, 0.7, 0.7)
-	love.graphics.rectangle("fill", xbar, 0, bwidth, g_height)
+	drawRectangle("fill", xbar, 0, bwidth, g_height)
 	love.graphics.setColor(0.4, 0.4, 0.4)
-	love.graphics.rectangle("fill", xbar + (bwidth - 2) / 2, htop, 2, sheight)
+	drawRectangle("fill", xbar + (bwidth - 2) / 2, htop, 2, sheight)
 	
 	local button1 = { id = 1, x = xbar, y = 0, w = bwidth, h = bheight, colour = { 0.8, 0.3, 0.3 },
 		onclick = function()
@@ -495,5 +558,6 @@ terminal.printf = lprintf
 terminal.dump = ldump
 terminal.showinfo = lshowinfo
 terminal.clear = lclear
+terminal.config = lconfig
 
 return terminal
