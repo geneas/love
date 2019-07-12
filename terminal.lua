@@ -53,7 +53,7 @@ local g_lmarg, g_rmarg = 2, 35
 local g_idgap, g_trgap = 2, 2
 local g_maxblocks = 10000
 local g_wordwrap = false
-local g_rotate = true--false
+local g_rotate = false
 
 -- screen parameters
 local g_width, g_height
@@ -229,7 +229,7 @@ local function lshowinfo()
 	--
 	g_shown = true
 	
-	lprintf("Löve2d terminal version 0.5")
+	lprintf("Löve2d terminal version 0.6")
 	lprintf("---------------------------")
 	lprintf("width %d height %d dpiScale %f", g_width, g_height, g_font:getDPIScale())
 	local function show(name)
